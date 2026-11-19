@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>MotoSync Cloud - Microservicios + Firebase</title>
+  <script src="/env-config.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; }
+    .card { background: #1e293b; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #334155; }
+    button { background: #3b82f6; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: bold; margin-right: 0.5rem; }
+    button:hover { background: #2563eb; }
+    button.logout { background: #ef4444; }
+    pre { background: #020617; padding: 1rem; border-radius: 6px; color: #38bdf8; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>MotoSync Cloud - Microservicios</h1>
+
+  <div class="card">
+    <h3>1. Autenticación Firebase</h3>
+    <p id="user-status">Estado: No autenticado</p>
+    <button id="btn-login">Iniciar sesión con Google</button>
+    <button id="btn-logout" class="logout" style="display:none;">Cerrar sesión</button>
+  </div>
+
+  <div class="card">
+    <h3>2. Consulta protegida vía API Gateway (Puerto 8000)</h3>
+    <button onclick="consultar('telemetria')">Consultar Telemetría (MS 1)</button>
+    <button onclick="consultar('mantenimiento')">Consultar Mantenimiento (MS 2)</button>
+  </div>
+
+  <pre id="output">Inicia sesión con Firebase para consultar los microservicios...</pre>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: window._env_.FIREBASE_API_KEY,
+      authDomain: window._env_.FIREBASE_AUTH_DOMAIN,
+      projectId: window._env_.FIREBASE_PROJECT_ID
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+    let currentToken = "";
+
+    onAuthStateChanged(auth, async (user) => {
+      const status = document.getElementById('user-status');
+      const btnLogin = document.getElementById('btn-login');
+      const btnLogout = document.getElementById('btn-logout');
+
+      if (user) {
+        currentToken = await user.getIdToken();
+        status.textContent = `Autenticado como: ${user.email}`;
+        btnLogin.style.display = 'none';
+        btnLogout.style.display = 'inline-block';
+      } else {
+        currentToken = "";
+        status.textContent = "Estado: No autenticado";
+        btnLogin.style.display = 'inline-block';
+        btnLogout.style.display = 'none';
+      }
+    });
+
+    document.getElementById('btn-login').onclick = () => signInWithPopup(auth, provider);
+    document.getElementById('btn-logout').onclick = () => signOut(auth);
+
+    window.consultar = async function(ruta) {
+      const out = document.getElementById('output');
+      if (!currentToken) {
+        out.textContent = "Acceso denegado: Primero inicia sesión con Firebase.";
+        return;
+      }
+      out.textContent = 'Consultando API Gateway con Token Firebase...';
+      try {
+        const res = await fetch(`http://localhost:8000/api/${ruta}`, {
+          headers: { 'Authorization': `Bearer ${currentToken}` }
+        });
+        const data = await res.json();
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Error conectando con el API Gateway: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
